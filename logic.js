@@ -1,11 +1,5 @@
 var canvas = document.getElementById('canvas');
 var context = canvas.getContext('2d');
-
-var bufferedCanvas = document.createElement('canvas');
-bufferedCanvas.width = window.innerWidth;
-bufferedCanvas.height = window.innerHeight;
-var bufferedContext = bufferedCanvas.getContext('2d');
-
 var mouseDown;
 var mouseX;
 var mouseY;
@@ -15,6 +9,57 @@ var idles = ['idle', 'idleBackAndForth', 'idleBreathing', 'idleFall', 'idleLayDo
 var alreadyIdle = false;
 var distThresh = 55; 
 const sprites = [];
+
+var bufferedCanvas = document.createElement('canvas');
+bufferedCanvas.width = window.innerWidth;
+bufferedCanvas.height = window.innerHeight;
+//var bufferedContext = bufferedCanvas.getContext('2d');
+
+const JSON_WAITING_TIME = 100, SPRITE_WAITING_TIME = 1000;
+var animData;
+var animations = [];
+var dataLoaded = false;
+fetch('../data/animationData.json')
+    .then(function(response) {
+        if (response.ok)
+            return response.json();
+        else
+            console.log("Error loading JSON!")
+    })
+    .then(animData  => { // Wait for JSON to load then load anims
+        for (const [key, value] of Object.entries(animData['TenderBud'])) {
+            let animArr = [];
+            for (let i = 0; i < animData['TenderBud'][key].length; i++) {
+                let img = new Image();
+                img.src = "../assets/images/TenderBud/" + key + "/" + i.toString() + '.png';
+                animArr.push(img);
+            }
+            
+            animations.push(animArr);
+        }    
+        dataLoaded = true;
+        start();
+    });
+
+    // Wait for data to load then wait five seconds before penguins begin walking
+function start() {
+    if (!dataLoaded) {
+        setTimeout(start, JSON_WAITING_TIME);
+        return;
+    }
+    // Wait five seconds
+    setTimeout(function() {
+        for (let j = 0; j < sprites.length; j++) {
+            sprites[j].randomDirection();
+        }
+    }, SPRITE_WAITING_TIME);
+}
+
+function getIdleAnimation() {
+    let numb = Math.floor(Math.random() * 2);
+    let idleAnim = idles[1];
+    return idleAnim;
+}
 
 context.fillStyle = "blue";
 context.fillRect(0, 0, canvas.clientWidth, canvas.height);
@@ -62,37 +107,21 @@ class Sprite {
     constructor(x, y, timeDelta, h, w) {
         this.x_y = [x,y];
         this.h_w = [h,w];
-        this.velocity = [Math.floor(Math.random() * 20) - 10, Math.floor(Math.random() * 20) - 10];
-        console.log("x: " + this.x_y[0])
+
+        
         this.acceleration = [1,1];
+        this.velocity = [0,0];
 
         this.timeDelta = timeDelta;
         this.lastAnimTime = new Date().getTime();
-        this.state = 'idle';
+        this.state = getIdleAnimation();
         this.animState = 0;
         this.bgIMG = null;
-        this.animData;
-        this.animations = [];
-        fetch('../data/animationData.json')
-            .then(function(response) {
-                if (response.ok)
-                    return response.json();
-                else
-                    console.log("Error loading JSON!")
-            })
-            .then(animData  => { // Wait for JSON to load then load anims
-                for (const [key, value] of Object.entries(animData['TenderBud'])) {
-                    let animArr = [];
-                    for (let i = 0; i < animData['TenderBud'][key].length; i++) {
-                        let img = new Image();
-                        img.src = "../assets/images/TenderBud/" + key + "/" + i.toString() + '.png';
-                        animArr.push(img);
-                    }
-                    
-                    this.animations.push(animArr);
-                }    
-                this.animData = animData;
-            });
+    }
+
+    randomDirection () {
+        let startingSpeed = 5, theta = Math.random() * 2 * Math.PI; // startingSpeed=1, theta=(0-1) * 2pi
+        this.velocity = [Math.cos(theta) * startingSpeed, Math.sin(theta) * startingSpeed]; // calculate x,y given angle & startingSpeed
     }
 
     draw(){
@@ -100,38 +129,73 @@ class Sprite {
             return;
         this.lastAnimTime =  new Date().getTime();
         
-        this.bgIMG = bufferedContext.getImageData(this.x_y[0], this.x_y[1], this.h_w[1], this.h_w[0]);
-        if (this.bgIMG != null)
-            bufferedContext.putImageData(this.bgIMG, this.x_y[0], this.x_y[1]);
-        
+        //this.bgIMG = context.getImageData(this.x_y[0], this.x_y[1], this.h_w[1], this.h_w[0]);
+        //if (this.bgIMG != null)
+          //  context.putImageData(this.bgIMG, this.x_y[0], this.x_y[1]);        
         //context.clearRect(this.x_y[0], this.x_y[1], this.h_w[1]*1.2, this.h_w[0]*1.2);
-        //bufferedContext.clearRect(this.x_y[0], this.x_y[1], this.h_w[1]*1.2, this.h_w[0]*1.2);
+        //bufferedContext.clearRect(this.x_y[0], this.x_y[1], this.h_w[1], this.h_w[0]);
 
-        
         // bug here, undef
         try {
-            if (this.animations[states.get(this.state)][this.animState] === undefined) {
+            if (this.animState > animations[states.get(this.state)].length)
                 this.animState = 0;
-            }
-            let img = this.animations[states.get(this.state)][this.animState];
-                
-            this.animState = (this.animState + 1) % this.animations[states.get(this.state)].length;
-            
-            bufferedContext.drawImage(img, this.x_y[0], this.x_y[1], this.h_w[1], this.h_w[0]);
+            let img = animations[states.get(this.state)][this.animState];
+            this.animState = (this.animState + 1) % animations[states.get(this.state)].length;
+            context.drawImage(img, this.x_y[0], this.x_y[1], this.h_w[1], this.h_w[0]);
         } catch (error) {
-            console.log(error);
-            console.log(this.state);
+            console.log(error + " state: " + this.state);
         }
+        
+    
+        
         this.move(); // MIGHT be better to put at end
     }
 
-    move() {
-        const canvasBox = canvas.getBoundingClientRect();
-        this.state = 'walk_N'; // change based on velocity/position, yada
-        
+    // Determine the animation/state based on the current velocity vector
+    getMovementDirection(futurePos) {
+        let relX = futurePos[0] - this.x_y[0];
+        let relY = futurePos[1] - this.x_y[1];
 
+        let facingDirection = Math.atan2(-relY, relX) * (180/Math.PI);
+
+        // Slices (45deg ea): 337.5 and 22.5  E 22.5 and 67.5   NE 67.5 and 112.5  N 112.5 and 157.5 NW 157.5 and 202.5 W 202 and 247.5   SW 247.5 and 292.5 S 292.5 and 337.5 SE
+        if ((facingDirection >= 337.5 && facingDirection <= 360 )|| facingDirection >= 0 && facingDirection <= 22.5) {
+            return "walk_E";
+        }
+        else if ((facingDirection >= 22.5 && facingDirection <= 67.5 )) {
+            return "walk_NE";
+        }
+        else if ((facingDirection >= 67.5 && facingDirection <= 112.5 )) {
+            return "walk_N";
+        }
+        else if ((facingDirection >= 112.5 && facingDirection <= 157.5 )) {
+            return "walk_NW";
+        }
+        else if ((facingDirection >= 157.5 && facingDirection <= 202.5 )) {
+            return "walk_W";
+        }
+        else if ((facingDirection >= 202.5 && facingDirection <= 247.5 )) {
+            return "walk_SW";
+        }
+        else if ((facingDirection >= 247.5 && facingDirection <= 292.5 )) {
+            return "walk_S";
+        }
+        else if ((facingDirection >= 292.5 && facingDirection <= 337.5 )) {
+            return "walk_SE";
+        }
+        else {
+            return getIdleAnimation();
+        }
+    }
+
+    move(state) {
+        const canvasBox = canvas.getBoundingClientRect();
+        
         let x = this.x_y[0] + this.velocity[0];
         let y = this.x_y[1] + this.velocity[1];
+        
+        
+        this.state = this.getMovementDirection([x,y]);
         if (x > (canvasBox.left + canvasBox.width - this.h_w[1]) || y < canvasBox.top || x < canvasBox.left || y > (canvasBox.top + canvasBox.height - this.h_w[0]*1.5)) // check if exited bounds, check if penguin 
             return;
         
@@ -169,27 +233,25 @@ window.addEventListener('resize', resizeCanvas, false);
                     }
 
 // Main
-let howManyPenguins = 2;
+let howManyPenguins = 100;
 for (let j = 0; j < howManyPenguins; j++) {
-    let penguin = new Sprite(canvas.width/2, canvas.height/2, 50, 50, 50);
+    let penguin = new Sprite(canvas.width/2, canvas.height/2, 10, 50, 50);
     sprites.push(penguin);
 }
+start();
 resizeCanvas();
 call_me_on_draw();
 
 // World view - the world can be affected by Sprites on it, projecting shadow/shading. Paraellel, not sequestrial.
 
 function call_me_on_draw(){
-   
-
-    //context.clearRect(this.x_y[0], this.x_y[1], this.h_w[1]*1.2, this.h_w[0]*1.2);
-    bufferedContext.clearRect(0, 0, canvas.width, canvas.height)
     context.clearRect(0, 0, canvas.width, canvas.height);   
-
+    
     for (let i = 0; i < sprites.length; i++) {
         sprites[i].draw();
     }
-    context.drawImage(bufferedCanvas, 0, 0);
-
     window.requestAnimationFrame(call_me_on_draw.bind(this));
+    //context.drawImage(canvas, 0, 0);
+    
+    
 }
