@@ -61,6 +61,11 @@ function getIdleAnimation() {
     return idleAnim;
 }
 
+// sqrt(a^2) + sqrt(b^2) = sqrt(y^2)
+function dist(a, b) {
+    return Math.sqrt(Math.pow(a[0] - b[0],2)) + Math.sqrt(Math.pow(a[1] - b[1],2));
+}
+
 context.fillStyle = "blue";
 context.fillRect(0, 0, canvas.clientWidth, canvas.height);
 
@@ -104,12 +109,14 @@ const states = new Map([
 
 // A penguin sprite has: Width, height, (x,y) position, idle relative path, time_delta
 class Sprite {
-    constructor(x, y, timeDelta, h, w) {
-        this.x_y = [x,y];
+    constructor(x, y, timeDelta, h, w, startSpeed, perception) {
+        this.x_y = [Math.random() * canvas.width, Math.random() * canvas.height];
         this.h_w = [h,w];
+        this.perception = perception;
+        this.startSpeed = startSpeed;
 
         
-        this.acceleration = [1,1];
+        this.acceleration = [0,0];
         this.velocity = [0,0];
 
         this.timeDelta = timeDelta;
@@ -120,8 +127,8 @@ class Sprite {
     }
 
     randomDirection () {
-        let startingSpeed = 5, theta = Math.random() * 2 * Math.PI; // startingSpeed=1, theta=(0-1) * 2pi
-        this.velocity = [Math.cos(theta) * startingSpeed, Math.sin(theta) * startingSpeed]; // calculate x,y given angle & startingSpeed
+        let theta = Math.random() * 2 * Math.PI; // startingSpeed=1, theta=(0-1) * 2pi
+        this.velocity = [Math.cos(theta) * this.startSpeed, Math.sin(theta) * this.startSpeed]; // calculate x,y given angle & startingSpeed
     }
 
     draw(){
@@ -145,10 +152,6 @@ class Sprite {
         } catch (error) {
             console.log(error + " state: " + this.state);
         }
-        
-    
-        
-        this.move(); // MIGHT be better to put at end
     }
 
     // Determine the animation/state based on the current velocity vector
@@ -188,20 +191,47 @@ class Sprite {
         }
     }
 
-    move(state) {
+    move() {
+        // Check if future movement puts sprite outside of playground
         const canvasBox = canvas.getBoundingClientRect();
-        
         let x = this.x_y[0] + this.velocity[0];
         let y = this.x_y[1] + this.velocity[1];
-        
-        
-        this.state = this.getMovementDirection([x,y]);
         if (x > (canvasBox.left + canvasBox.width - this.h_w[1]) || y < canvasBox.top || x < canvasBox.left || y > (canvasBox.top + canvasBox.height - this.h_w[0]*1.5)) // check if exited bounds, check if penguin 
             return;
         
+        this.state = this.getMovementDirection([x,y]);
+        // Set pos
         this.x_y[0] = x;
         this.x_y[1] = y;
-        alreadyIdle = false;
+        // Set velocity
+        this.velocity[this.velocity[0] + this.acceleration[0], this.velocity[1] + this.acceleration[1]];
+    }
+
+    // Align with the other boids velocity if they're within perception
+    align(boids) {
+        let avgVelocity = [0,0];
+        let nearbyBoids = 0;
+        for (let i = 0; i < boids.length; i++) {
+            if (boids[i] != this && dist(this.x_y, boids[i].x_y) < this.perception) {
+                nearbyBoids++;
+                avgVelocity[0] += boids[i].velocity[0]
+                avgVelocity[1] += boids[i].velocity[1]
+            }
+        }
+        if (nearbyBoids > 0) {
+            avgVelocity[0] /= nearbyBoids;
+            avgVelocity[1] /= nearbyBoids;
+            avgVelocity[0] -= this.velocity[0];
+            avgVelocity[1] -= this.velocity[1];
+            return avgVelocity;
+        }
+        return [0,0];
+    }
+
+    flock(boids) {
+        let aln = this.align(boids);
+        this.velocity[0] += aln[0]; 
+        this.velocity[1] += aln[1]; 
     }
     
     // notes for keeping Sprites track of shared resources, spirite[] array, score, boundaries. Threads need to check & update the shared resource!
@@ -235,7 +265,7 @@ window.addEventListener('resize', resizeCanvas, false);
 // Main
 let howManyPenguins = 100;
 for (let j = 0; j < howManyPenguins; j++) {
-    let penguin = new Sprite(canvas.width/2, canvas.height/2, 10, 50, 50);
+    let penguin = new Sprite(canvas.width/2, canvas.height/2, 2, 50, 50, 1, 50);
     sprites.push(penguin);
 }
 start();
@@ -249,6 +279,8 @@ function call_me_on_draw(){
     
     for (let i = 0; i < sprites.length; i++) {
         sprites[i].draw();
+        sprites[i].flock(sprites);
+        sprites[i].move();
     }
     window.requestAnimationFrame(call_me_on_draw.bind(this));
     //context.drawImage(canvas, 0, 0);
