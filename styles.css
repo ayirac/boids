@@ -1,0 +1,25 @@
+.sliders-container {
+    display: flex;
+    position: absolute;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    bottom: 0;
+  }
+  
+  .slidecontainer {
+    display: flex;
+    flex-direction: column;
+    margin-right: 20px;
+  }
+
+.slider {
+  width: 150px;
+}
+
+.sliderheader {
+    margin-bottom: 0px;
+    text-align: center;
+    font-weight: 700;
+    font-family:"Calibri", sans-serif;
+}

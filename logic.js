@@ -1,119 +1,13 @@
 var canvas = document.getElementById('canvas');
 var context = canvas.getContext('2d');
-var mouseDown;
-var mouseX;
-var mouseY;
 var init_size = true;
-var keys = {};
 var idles = ['idle', 'idleBackAndForth', 'idleBreathing', 'idleFall', 'idleLayDown', 'idleLookAround', 'idleLookDown', 'idleLookLeft', 'idleLookRight', 'idleLookUp', 'idleSit', 'idleSpin', 'idleWave'];
-var alreadyIdle = false;
-var distThresh = 55; 
 const sprites = [];
-
-var bufferedCanvas = document.createElement('canvas');
-bufferedCanvas.width = window.innerWidth;
-bufferedCanvas.height = window.innerHeight;
-//var bufferedContext = bufferedCanvas.getContext('2d');
-
 const JSON_WAITING_TIME = 100, SPRITE_WAITING_TIME = 1000;
-var animData;
-var animations = [];
-var dataLoaded = false;
-fetch('../data/animationData.json')
-    .then(function(response) {
-        if (response.ok)
-            return response.json();
-        else
-            console.log("Error loading JSON!")
-    })
-    .then(animData  => { // Wait for JSON to load then load anims
-        for (const [key, value] of Object.entries(animData['TenderBud'])) {
-            let animArr = [];
-            for (let i = 0; i < animData['TenderBud'][key].length; i++) {
-                let img = new Image();
-                img.src = "../assets/images/TenderBud/" + key + "/" + i.toString() + '.png';
-                animArr.push(img);
-            }
-            
-            animations.push(animArr);
-        }    
-        dataLoaded = true;
-        start();
-    });
-
-    // Wait for data to load then wait five seconds before penguins begin walking
-function start() {
-    if (!dataLoaded) {
-        setTimeout(start, JSON_WAITING_TIME);
-        return;
-    }
-    // Wait five seconds
-    setTimeout(function() {
-        for (let j = 0; j < sprites.length; j++) {
-            sprites[j].randomDirection();
-        }
-    }, SPRITE_WAITING_TIME);
-}
-
-function getIdleAnimation() {
-    //let numb = Math.floor(Math.random() * idles.length);
-    let idleAnim = idles[1];
-    return idleAnim;
-}
-
-// sqrt(a^2) + sqrt(b^2) = sqrt(y^2)
-function dist(a, b) {
-    return Math.sqrt(Math.pow(a[0] - b[0],2)) + Math.sqrt(Math.pow(a[1] - b[1],2));
-}
-
-context.fillStyle = "blue";
-context.fillRect(0, 0, canvas.clientWidth, canvas.height);
-
-function getMag(vec) { // Returns the current mag (length) of a vector
-    return Math.sqrt(Math.pow(vec[0],2) + Math.pow(vec[1],2));
-}
-
-function normalize(vec) { // Divide each element by it's mag (length) to normalize to an unit vector
-    let m = getMag(vec);
-    let nvec = vec.slice();
-    nvec[0] /= m;
-    nvec[1] /= m;
-    return nvec;
-}
-
-function setMag(vec, mag) { // Divide each element by it's original mag to normalize then scale with new mag
-    let unitVector = normalize(vec);
-    unitVector[0] *= mag;
-    unitVector[1] *= mag;
-    vec[0] = unitVector[0];
-    vec[1] = unitVector[1];
-}
-
-function setLimit(vec, limit) { // Divide each element by it's original mag to normalize then scale the limit if the mag is over the limit
-    let m = getMag(vec);
-    if (m > limit) {
-        let unitVector = normalize(vec);
-        unitVector[0] *= limit;
-        unitVector[1] *= limit;
-        vec[0] = unitVector[0];
-        vec[1] = unitVector[1];
-    }
-}
-
-// resize the canvas to fill browser window dynamically
-window.addEventListener('resize', resizeCanvas, false);
-                  function resizeCanvas() {
-                          canvas.width = window.innerWidth;
-                          canvas.height = window.innerHeight;
-                          if(init_size){
-                              init_size = false;
-                              return;
-                          }
-                  }
-
-resizeCanvas();
-
-const states = new Map([
+var animData;               // JSON animation data stored here
+var animations = [];        // Array of animation arrays 2D 
+var dataLoaded = false; 
+const states = new Map([    // Mapping for animations array
     ['idle', 0],
     ['idleLookRight', 1],
     ['idleSit', 2],
@@ -136,6 +30,94 @@ const states = new Map([
     ['walk_W', 19],
     ['idleWave', 20],
 ]);
+fetch('../data/animationData.json')
+    .then(function(response) {
+        if (response.ok)
+            return response.json();
+        else
+            console.log("Error loading JSON!")
+    })
+    .then(animData  => { // Wait for JSON to load then load anims
+        for (const [key, value] of Object.entries(animData['TenderBud'])) {
+            let animArr = [];
+            for (let i = 0; i < animData['TenderBud'][key].length; i++) {
+                let img = new Image();
+                img.src = "../assets/images/TenderBud/" + key + "/" + i.toString() + '.png';
+                animArr.push(img);
+            }
+            animations.push(animArr);
+        }    
+        dataLoaded = true;
+        checkJsonLoaded();
+    });
+
+// Wait for data to load then wait five seconds before penguins begin walking
+function checkJsonLoaded() {
+    if (!dataLoaded) {
+        setTimeout(checkJsonLoaded, JSON_WAITING_TIME);
+        return;
+    }
+}
+
+// Returns a random Idle animation
+function getIdleAnimation() {
+    //let numb = Math.floor(Math.random() * idles.length); // Broken random idle animations
+    let idleAnim = idles[1];
+    return idleAnim;
+}
+
+// Vector interaction functions //
+// Returns distance between two vectors
+function dist(a, b) {
+    return Math.sqrt(Math.pow(a[0] - b[0], 2) + Math.pow(a[1] - b[1], 2));
+}
+
+// Returns the current mag (length) of a vector
+function getMag(vec) { 
+    return Math.sqrt(Math.pow(vec[0],2) + Math.pow(vec[1],2));
+}
+
+// Divide each element by it's mag (length) to normalize to an unit vector
+function normalize(vec) { 
+    let m = getMag(vec);
+    let nvec = vec.slice();
+    nvec[0] /= m;
+    nvec[1] /= m;
+    return nvec;
+}
+
+// Divide each element by it's original mag to normalize then scale with new mag
+function setMag(vec, mag) { 
+    let unitVector = normalize(vec);
+    unitVector[0] *= mag;
+    unitVector[1] *= mag;
+    vec[0] = unitVector[0];
+    vec[1] = unitVector[1];
+}
+
+// Divide each element by it's original mag to normalize then scale the limit if the mag is over the limit
+function setLimit(vec, limit) { 
+    let m = getMag(vec);
+    if (m > limit) {
+        let unitVector = normalize(vec);
+        unitVector[0] *= limit;
+        unitVector[1] *= limit;
+        vec[0] = unitVector[0];
+        vec[1] = unitVector[1];
+    }
+}
+
+// resize the canvas to fill browser window dynamically
+window.addEventListener('resize', resizeCanvas, false);
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        if(init_size){
+            init_size = false;
+            return;
+        }
+}
+resizeCanvas();
 
 // A penguin sprite has: Width, height, (x,y) position, idle relative path, time_delta
 class Sprite {
@@ -147,9 +129,10 @@ class Sprite {
         this.startSpeed = startSpeed;
 
         this.acceleration = [0,0];
-        this.velocity = [0,0];
-        this.maxVelocity = 2;
-        this.maxForce = .5;
+        this.velocity = this.randomDirection();
+        setMag(this.velocity, Math.random() < 0.5 ? 2 : 4 )
+        this.maxVelocity = 5;
+        this.maxForce = 2;
 
         this.timeDelta = timeDelta;
         this.lastAnimTime = new Date().getTime();
@@ -160,14 +143,13 @@ class Sprite {
 
     randomDirection () {
         let theta = Math.random() * 2 * Math.PI; // startingSpeed=1, theta=(0-1) * 2pi
-        this.velocity = [Math.cos(theta) * this.startSpeed, Math.sin(theta) * this.startSpeed]; // calculate x,y given angle & startingSpeed
+        return [Math.cos(theta) * this.startSpeed, Math.sin(theta) * this.startSpeed]; // calculate x,y given angle & startingSpeed
     }
 
     draw(){
         if ((this.timeDelta + this.lastAnimTime) > new Date().getTime())
             return;
         this.lastAnimTime =  new Date().getTime();
-        
         //this.bgIMG = context.getImageData(this.x_y[0], this.x_y[1], this.h_w[1], this.h_w[0]);
         //if (this.bgIMG != null)
           //  context.putImageData(this.bgIMG, this.x_y[0], this.x_y[1]);        
@@ -237,8 +219,8 @@ class Sprite {
     }
     move() {
         // Update state based off position  
-        let x = this.x_y[0] + this.velocity[0];      
-        let y = this.x_y[1] + this.velocity[1];  
+        let x = this.x_y[0] + this.velocity[0] || this.x_y[0];      
+        let y = this.x_y[1] + this.velocity[1] || this.x_y[1];  
         this.state = this.getMovementDirection([x,y]);
         // Set pos
         this.x_y[0] = x;
@@ -251,60 +233,106 @@ class Sprite {
 
     // Align with the other boids velocity if they're within perception
     align(boids) {
-        let avgVelocity = [0,0];
+        let steering = [0,0];
         let nearbyBoids = 0;
+        let perception = document.getElementById("perception").value;
         for (let i = 0; i < boids.length; i++) {
-            if (boids[i] != this && dist(this.x_y, boids[i].x_y) < this.perception) {
+            if (boids[i] != this && dist(this.x_y, boids[i].x_y) < perception) {
                 nearbyBoids++;
-                avgVelocity[0] += boids[i].velocity[0]
-                avgVelocity[1] += boids[i].velocity[1]
+                steering[0] += boids[i].velocity[0]
+                steering[1] += boids[i].velocity[1]
             }
         }
         if (nearbyBoids > 0) {
-            avgVelocity[0] /= nearbyBoids;
-            avgVelocity[1] /= nearbyBoids;
-            setMag(avgVelocity, this.maxVelocity);
-            avgVelocity[0] -= this.velocity[0];
-            avgVelocity[1] -= this.velocity[1];
-            setLimit(avgVelocity, this.maxForce);
-            return avgVelocity;
+            steering[0] /= nearbyBoids;
+            steering[1] /= nearbyBoids;
+            setMag(steering, this.maxVelocity);
+            steering[0] -= this.velocity[0];
+            steering[1] -= this.velocity[1];
+            setLimit(steering, this.maxForce);
+            return steering;
         }
         return [0,0];
     }
 
     // Move towards the other boids position if they're within perception
     coheision(boids) {
-        let avgPos = [0,0];
+        let steering = [0,0];
         let nearbyBoids = 0;
+        let perception = document.getElementById("perception").value;
         for (let i = 0; i < boids.length; i++) {
-            if (boids[i] != this && dist(this.x_y, boids[i].x_y) < this.perception) {
+            if (boids[i] != this && dist(this.x_y, boids[i].x_y) < perception) {
                 nearbyBoids++;
-                avgPos[0] += boids[i].x_y[0]
-                avgPos[1] += boids[i].x_y[1]
+                steering[0] += boids[i].x_y[0]
+                steering[1] += boids[i].x_y[1]
             }
         }
         if (nearbyBoids > 0) {
-            avgPos[0] /= nearbyBoids;
-            avgPos[1] /= nearbyBoids;
-            setMag(avgPos, this.maxVelocity);
-            avgPos[0] -= this.x_y[0];
-            avgPos[1] -= this.x_y[1];
-            setLimit(avgPos, this.maxForce);
-            return avgPos;
+            steering[0] /= nearbyBoids;
+            steering[1] /= nearbyBoids;
+            setMag(steering, this.maxVelocity);
+            steering[0] -= this.velocity[0];
+            steering[1] -= this.velocity[1];
+            setLimit(steering, this.maxForce);
+            return steering;
+        }
+        return [0,0];
+    }
+
+    // Move away from other boids by calculating the average inverse distance difference of each boid to the main boid
+    seperation(boids) {
+        let steering = [0,0];
+        let nearbyBoids = 0;
+        let perception = document.getElementById("perception").value;
+        for (let i = 0; i < boids.length; i++) {
+            let dis = dist(this.x_y, boids[i].x_y);
+            if (boids[i] != this && dis < perception) {
+                let diff = [this.x_y[0] - boids[i].x_y[0], this.x_y[1] - boids[i].x_y[1]];
+                diff[0] /= dis;
+                diff[1] /= dis;
+                steering[0] += diff[0];
+                steering[1] += diff[1];
+                nearbyBoids++;
+            }
+        }
+        if (nearbyBoids > 0) {
+            steering[0] /= nearbyBoids;
+            steering[1] /= nearbyBoids;
+            setMag(steering, this.maxVelocity);
+            steering[0] -= this.velocity[0];
+            steering[1] -= this.velocity[1];
+            setLimit(steering, this.maxForce);
+            return steering;
         }
         return [0,0];
     }
 
     flock(boids) {
+        this.acceleration[0] = 0;
+        this.acceleration[1] = 0;
         let alignment = this.align(boids);
         let coheision = this.coheision(boids);
+        let seperation = this.seperation(boids);
+
+        // Scale by sliders
+        let alignScale = document.getElementById("alignment").value;
+        let cohesionScale = document.getElementById("cohesion").value;
+        let sepertScale = document.getElementById("seperation").value;
+        alignment[0] *= alignScale;
+        alignment[1] *= alignScale;
+        coheision[0] *= cohesionScale;
+        coheision[1] *= cohesionScale;
+        seperation[0] *= sepertScale;
+        seperation[1] *= sepertScale;
+
+        // Add forces
         this.acceleration[0] += alignment[0];       // Add alignment force
         this.acceleration[1] += alignment[1]; 
         this.acceleration[0] += coheision[0];       // Add cohesion force
         this.acceleration[1] += coheision[1];
+        this.acceleration[0] += seperation[0];       // Add seperation force
+        this.acceleration[1] += seperation[1];
     }
-    
-    // notes for keeping Sprites track of shared resources, spirite[] array, score, boundaries. Threads need to check & update the shared resource!
     
     canvas_resize() {
         // redo this
@@ -313,10 +341,7 @@ class Sprite {
         //this.x_speed = this.x_speedFactor * canvas.width;
         //this.y_speed = this.y_speedFactor * canvas.height;
     }
-    
 }
-
-
 
 // Handlers
 window.addEventListener('resize', resizeCanvas, false);
@@ -336,15 +361,16 @@ window.addEventListener('resize', resizeCanvas, false);
                     }
 
 // Main
+checkJsonLoaded();
 let howManyPenguins = 100;
 for (let j = 0; j < howManyPenguins; j++) {
-    let penguin = new Sprite(canvas.width/2, canvas.height/2, 2, 30, 30, 1, 100);
+    let penguin = new Sprite(canvas.width/2, canvas.height/2, 2, 30, 30, 1, 40);
     sprites.push(penguin);
 }
-start();
 resizeCanvas();
 call_me_on_draw();
 
+// notes for keeping Sprites track of shared resources, spirite[] array, score, boundaries. Threads need to check & update the shared resource!
 // World view - the world can be affected by Sprites on it, projecting shadow/shading. Paraellel, not sequestrial.
 
 function call_me_on_draw(){
@@ -357,7 +383,4 @@ function call_me_on_draw(){
         sprites[i].move();
     }
     window.requestAnimationFrame(call_me_on_draw.bind(this));
-    //context.drawImage(canvas, 0, 0);
-    
-    
 }
