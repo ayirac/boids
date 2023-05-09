@@ -56,7 +56,7 @@ function start() {
 }
 
 function getIdleAnimation() {
-    let numb = Math.floor(Math.random() * 2);
+    //let numb = Math.floor(Math.random() * idles.length);
     let idleAnim = idles[1];
     return idleAnim;
 }
@@ -69,6 +69,36 @@ function dist(a, b) {
 context.fillStyle = "blue";
 context.fillRect(0, 0, canvas.clientWidth, canvas.height);
 
+function getMag(vec) { // Returns the current mag (length) of a vector
+    return Math.sqrt(Math.pow(vec[0],2) + Math.pow(vec[1],2));
+}
+
+function normalize(vec) { // Divide each element by it's mag (length) to normalize to an unit vector
+    let m = getMag(vec);
+    let nvec = vec.slice();
+    nvec[0] /= m;
+    nvec[1] /= m;
+    return nvec;
+}
+
+function setMag(vec, mag) { // Divide each element by it's original mag to normalize then scale with new mag
+    let unitVector = normalize(vec);
+    unitVector[0] *= mag;
+    unitVector[1] *= mag;
+    vec[0] = unitVector[0];
+    vec[1] = unitVector[1];
+}
+
+function setLimit(vec, limit) { // Divide each element by it's original mag to normalize then scale the limit if the mag is over the limit
+    let m = getMag(vec);
+    if (m > limit) {
+        let unitVector = normalize(vec);
+        unitVector[0] *= limit;
+        unitVector[1] *= limit;
+        vec[0] = unitVector[0];
+        vec[1] = unitVector[1];
+    }
+}
 
 // resize the canvas to fill browser window dynamically
 window.addEventListener('resize', resizeCanvas, false);
@@ -111,13 +141,15 @@ const states = new Map([
 class Sprite {
     constructor(x, y, timeDelta, h, w, startSpeed, perception) {
         this.x_y = [Math.random() * canvas.width, Math.random() * canvas.height];
+        //this.x_y = [x,y];
         this.h_w = [h,w];
         this.perception = perception;
         this.startSpeed = startSpeed;
 
-        
         this.acceleration = [0,0];
         this.velocity = [0,0];
+        this.maxVelocity = 2;
+        this.maxForce = .5;
 
         this.timeDelta = timeDelta;
         this.lastAnimTime = new Date().getTime();
@@ -150,7 +182,8 @@ class Sprite {
             this.animState = (this.animState + 1) % animations[states.get(this.state)].length;
             context.drawImage(img, this.x_y[0], this.x_y[1], this.h_w[1], this.h_w[0]);
         } catch (error) {
-            console.log(error + " state: " + this.state);
+            //console.log(error + " state: " + this.state);
+            //console.log(animations);
         }
     }
 
@@ -191,20 +224,29 @@ class Sprite {
         }
     }
 
+    edges() {
+        if (this.x_y[0] > canvas.width) // X bound check
+            this.x_y[0] = 0;
+        else if (this.x_y[0] < 0)
+            this.x_y[0] = canvas.width;
+
+        if (this.x_y[1] > canvas.height) // Y bound check
+            this.x_y[1] = 0;
+        else if (this.x_y[1] < 0)
+            this.x_y[1] = canvas.height;
+    }
     move() {
-        // Check if future movement puts sprite outside of playground
-        const canvasBox = canvas.getBoundingClientRect();
-        let x = this.x_y[0] + this.velocity[0];
-        let y = this.x_y[1] + this.velocity[1];
-        if (x > (canvasBox.left + canvasBox.width - this.h_w[1]) || y < canvasBox.top || x < canvasBox.left || y > (canvasBox.top + canvasBox.height - this.h_w[0]*1.5)) // check if exited bounds, check if penguin 
-            return;
-        
+        // Update state based off position  
+        let x = this.x_y[0] + this.velocity[0];      
+        let y = this.x_y[1] + this.velocity[1];  
         this.state = this.getMovementDirection([x,y]);
         // Set pos
         this.x_y[0] = x;
         this.x_y[1] = y;
         // Set velocity
-        this.velocity[this.velocity[0] + this.acceleration[0], this.velocity[1] + this.acceleration[1]];
+        this.velocity[0] += this.acceleration[0];
+        this.velocity[1] += this.acceleration[1];
+        setLimit(this.velocity, this.maxVelocity);  
     }
 
     // Align with the other boids velocity if they're within perception
@@ -221,17 +263,45 @@ class Sprite {
         if (nearbyBoids > 0) {
             avgVelocity[0] /= nearbyBoids;
             avgVelocity[1] /= nearbyBoids;
+            setMag(avgVelocity, this.maxVelocity);
             avgVelocity[0] -= this.velocity[0];
             avgVelocity[1] -= this.velocity[1];
+            setLimit(avgVelocity, this.maxForce);
             return avgVelocity;
         }
         return [0,0];
     }
 
+    // Move towards the other boids position if they're within perception
+    coheision(boids) {
+        let avgPos = [0,0];
+        let nearbyBoids = 0;
+        for (let i = 0; i < boids.length; i++) {
+            if (boids[i] != this && dist(this.x_y, boids[i].x_y) < this.perception) {
+                nearbyBoids++;
+                avgPos[0] += boids[i].x_y[0]
+                avgPos[1] += boids[i].x_y[1]
+            }
+        }
+        if (nearbyBoids > 0) {
+            avgPos[0] /= nearbyBoids;
+            avgPos[1] /= nearbyBoids;
+            setMag(avgPos, this.maxVelocity);
+            avgPos[0] -= this.x_y[0];
+            avgPos[1] -= this.x_y[1];
+            setLimit(avgPos, this.maxForce);
+            return avgPos;
+        }
+        return [0,0];
+    }
+
     flock(boids) {
-        let aln = this.align(boids);
-        this.velocity[0] += aln[0]; 
-        this.velocity[1] += aln[1]; 
+        let alignment = this.align(boids);
+        let coheision = this.coheision(boids);
+        this.acceleration[0] += alignment[0];       // Add alignment force
+        this.acceleration[1] += alignment[1]; 
+        this.acceleration[0] += coheision[0];       // Add cohesion force
+        this.acceleration[1] += coheision[1];
     }
     
     // notes for keeping Sprites track of shared resources, spirite[] array, score, boundaries. Threads need to check & update the shared resource!
@@ -243,7 +313,10 @@ class Sprite {
         //this.x_speed = this.x_speedFactor * canvas.width;
         //this.y_speed = this.y_speedFactor * canvas.height;
     }
+    
 }
+
+
 
 // Handlers
 window.addEventListener('resize', resizeCanvas, false);
@@ -265,7 +338,7 @@ window.addEventListener('resize', resizeCanvas, false);
 // Main
 let howManyPenguins = 100;
 for (let j = 0; j < howManyPenguins; j++) {
-    let penguin = new Sprite(canvas.width/2, canvas.height/2, 2, 50, 50, 1, 50);
+    let penguin = new Sprite(canvas.width/2, canvas.height/2, 2, 30, 30, 1, 100);
     sprites.push(penguin);
 }
 start();
@@ -278,6 +351,7 @@ function call_me_on_draw(){
     context.clearRect(0, 0, canvas.width, canvas.height);   
     
     for (let i = 0; i < sprites.length; i++) {
+        sprites[i].edges();
         sprites[i].draw();
         sprites[i].flock(sprites);
         sprites[i].move();
