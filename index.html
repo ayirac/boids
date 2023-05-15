@@ -11,22 +11,41 @@
         <div class="sliders-container">
             <div class="slidecontainer">
                 <p class="sliderheader">Alignment</p>
-                <input type="range" min="0.0" max="1.0" step="0.01" value="0.5" class="slider" id="alignment">
+                <input type="range" min="0.0" max="1.0" step="0.01" value="0.9" class="slider" id="alignment">
             </div>
             <div class="slidecontainer">
                 <p class="sliderheader">Cohesion</p>
-                <input type="range" min="0.0" max="1.0" step="0.01" value="0.5" class="slider" id="cohesion">
+                <input type="range" min="0.0" max="1.0" step="0.01" value="0.9" class="slider" id="cohesion">
             </div>
             <div class="slidecontainer">
                 <p class="sliderheader">Seperation</p>
-                <input type="range" min="0.0" max="1.0" step="0.01" value="0.5" class="slider" id="seperation">
+                <input type="range" min="0.0" max="1.0" step="0.01" value="0.2" class="slider" id="seperation">
             </div>
             <div class="slidecontainer">
                 <p class="sliderheader">Perception</p>
-                <input type="range" min="0" max="300" step="1" value="50" class="slider" id="perception">
+                <input type="range" min="0" max="300" step="1" value="35" class="slider" id="perception">
             </div>
-        </div>
-        
+            <div class="slidecontainer">
+                <p class="sliderheader">Penguins</p>
+                <input type="range" min="0" max="300" step="1" value="50" class="slider" id="penguin-amt">
+            </div>
+            <div class="slidecontainer">
+                <p class="sliderheader">Max Force</p>
+                <input type="range" min="1" max="100" step="1" value="2" class="slider" id="max-force">
+            </div>
+            <div class="slidecontainer">
+                <p class="sliderheader">Max Speed</p>
+                <input type="range" min="1" max="100" step="1" value="2" class="slider" id="max-speed">
+            </div>
+            <div class="slidecontainer">
+                <p class="sliderheader">Bounce</p>
+                <input type="checkbox" id="bounce" name="bounce">
+            </div>
+            <div class="slidecontainer">
+                <p class="sliderheader">Reset</p>
+                <input type="button" id="reset-button" name="reset">
+            </div>
+        </div>        
     </body>
     <script type="text/javascript" src="logic.js"> </script>
 </html>

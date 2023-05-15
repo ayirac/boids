@@ -7,6 +7,8 @@ const JSON_WAITING_TIME = 100, SPRITE_WAITING_TIME = 1000;
 var animData;               // JSON animation data stored here
 var animations = [];        // Array of animation arrays 2D 
 var dataLoaded = false; 
+var maxVelocity = 2;        // Global for all penguins variables affected by sliders
+var maxForce = 3;
 const states = new Map([    // Mapping for animations array
     ['idle', 0],
     ['idleLookRight', 1],
@@ -30,26 +32,33 @@ const states = new Map([    // Mapping for animations array
     ['walk_W', 19],
     ['idleWave', 20],
 ]);
-fetch('../data/animationData.json')
-    .then(function(response) {
-        if (response.ok)
-            return response.json();
-        else
-            console.log("Error loading JSON!")
-    })
-    .then(animData  => { // Wait for JSON to load then load anims
-        for (const [key, value] of Object.entries(animData['TenderBud'])) {
+
+function loadAnimations() {
+    return new Promise((resolve, reject) => {
+      // load animation data
+      fetch('../data/animationData.json')
+        .then(response => response.json())
+        .then(data => {
+          // initialize animations array
+          for (const [key, value] of Object.entries(data['TenderBud'])) {
             let animArr = [];
-            for (let i = 0; i < animData['TenderBud'][key].length; i++) {
-                let img = new Image();
-                img.src = "../assets/images/TenderBud/" + key + "/" + i.toString() + '.png';
-                animArr.push(img);
+            for (let i = 0; i < data['TenderBud'][key].length; i++) {
+              let img = new Image();
+              img.src = "../assets/images/TenderBud/" + key + "/" + i.toString() + '.png';
+              animArr.push(img);
             }
-            animations.push(animArr);
-        }    
-        dataLoaded = true;
-        checkJsonLoaded();
+            this.animations.push(animArr);
+          }
+
+          // resolve Promise to signal that animations have loaded
+          resolve();
+        })
+        .catch(error => {
+          console.log("Error loading animation data:", error);
+          reject(error);
+        });
     });
+  }
 
 // Wait for data to load then wait five seconds before penguins begin walking
 function checkJsonLoaded() {
@@ -107,32 +116,20 @@ function setLimit(vec, limit) {
     }
 }
 
-// resize the canvas to fill browser window dynamically
-window.addEventListener('resize', resizeCanvas, false);
-    function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        if(init_size){
-            init_size = false;
-            return;
-        }
-}
-resizeCanvas();
-
 // A penguin sprite has: Width, height, (x,y) position, idle relative path, time_delta
 class Sprite {
     constructor(x, y, timeDelta, h, w, startSpeed, perception) {
-        this.x_y = [Math.random() * canvas.width, Math.random() * canvas.height];
         //this.x_y = [x,y];
         this.h_w = [h,w];
+        this.x_y = [(Math.random() * (canvas.width - this.h_w[0])), Math.random() * (canvas.height - this.h_w[1])];
         this.perception = perception;
         this.startSpeed = startSpeed;
 
+           
         this.acceleration = [0,0];
         this.velocity = this.randomDirection();
         setMag(this.velocity, Math.random() < 0.5 ? 2 : 4 )
-        this.maxVelocity = 5;
-        this.maxForce = 2;
+        
 
         this.timeDelta = timeDelta;
         this.lastAnimTime = new Date().getTime();
@@ -147,16 +144,17 @@ class Sprite {
     }
 
     draw(){
-        if ((this.timeDelta + this.lastAnimTime) > new Date().getTime())
+        if ((this.timeDelta + this.lastAnimTime) > new Date().getTime()) {
             return;
+        }
         this.lastAnimTime =  new Date().getTime();
+        // Unused, had issues with other penguins getting clipped.
         //this.bgIMG = context.getImageData(this.x_y[0], this.x_y[1], this.h_w[1], this.h_w[0]);
         //if (this.bgIMG != null)
           //  context.putImageData(this.bgIMG, this.x_y[0], this.x_y[1]);        
         //context.clearRect(this.x_y[0], this.x_y[1], this.h_w[1]*1.2, this.h_w[0]*1.2);
-        //bufferedContext.clearRect(this.x_y[0], this.x_y[1], this.h_w[1], this.h_w[0]);
 
-        // bug here, undef
+        // bug here, minor
         try {
             if (this.animState > animations[states.get(this.state)].length)
                 this.animState = 0;
@@ -206,6 +204,21 @@ class Sprite {
         }
     }
 
+    edges_bounce() {
+        if (this.x_y[0] > canvas.width - this.h_w[1]) { // X bound check
+            this.velocity = [2*-this.velocity[0], -this.velocity[1]];
+        }
+        else if (this.x_y[0] < 0) {
+            this.velocity = [-this.velocity[0], -this.velocity[1]];
+        }
+        if (this.x_y[1] > canvas.height - this.h_w[0]) { // Y bound check
+            this.velocity = [-this.velocity[0], 2*-this.velocity[1]];
+        }
+        else if (this.x_y[1] < 0) {
+            this.velocity = [-this.velocity[0], -this.velocity[1]];
+        }
+    }
+
     edges() {
         if (this.x_y[0] > canvas.width) // X bound check
             this.x_y[0] = 0;
@@ -228,7 +241,7 @@ class Sprite {
         // Set velocity
         this.velocity[0] += this.acceleration[0];
         this.velocity[1] += this.acceleration[1];
-        setLimit(this.velocity, this.maxVelocity);  
+        setLimit(this.velocity, maxVelocity);  
     }
 
     // Align with the other boids velocity if they're within perception
@@ -246,10 +259,10 @@ class Sprite {
         if (nearbyBoids > 0) {
             steering[0] /= nearbyBoids;
             steering[1] /= nearbyBoids;
-            setMag(steering, this.maxVelocity);
+            setMag(steering, maxVelocity);
             steering[0] -= this.velocity[0];
             steering[1] -= this.velocity[1];
-            setLimit(steering, this.maxForce);
+            setLimit(steering, maxForce);
             return steering;
         }
         return [0,0];
@@ -270,10 +283,10 @@ class Sprite {
         if (nearbyBoids > 0) {
             steering[0] /= nearbyBoids;
             steering[1] /= nearbyBoids;
-            setMag(steering, this.maxVelocity);
+            setMag(steering, maxVelocity);
             steering[0] -= this.velocity[0];
             steering[1] -= this.velocity[1];
-            setLimit(steering, this.maxForce);
+            setLimit(steering, maxForce);
             return steering;
         }
         return [0,0];
@@ -298,10 +311,10 @@ class Sprite {
         if (nearbyBoids > 0) {
             steering[0] /= nearbyBoids;
             steering[1] /= nearbyBoids;
-            setMag(steering, this.maxVelocity);
+            setMag(steering, maxVelocity);
             steering[0] -= this.velocity[0];
             steering[1] -= this.velocity[1];
-            setLimit(steering, this.maxForce);
+            setLimit(steering, maxForce);
             return steering;
         }
         return [0,0];
@@ -335,40 +348,84 @@ class Sprite {
     }
     
     canvas_resize() {
-        // redo this
+        // Didn't get around to doing this, so penguins are fixed size
         //this.width = canvas.width * this.widthScale;
         //this.height = canvas.height * this.heightScale;
-        //this.x_speed = this.x_speedFactor * canvas.width;
-        //this.y_speed = this.y_speedFactor * canvas.height;
     }
 }
 
 // Handlers
+// Resize
 window.addEventListener('resize', resizeCanvas, false);
                     function resizeCanvas() {
                             canvas.width = window.innerWidth;
                             canvas.height = window.innerHeight;
-
                             if(init_size){
                                 init_size = false;
                                 return;
                             }
-                            
-                            // call on sprites array & get them to a size comp to canva
+                            // call on sprites array
                             for(let i=0; i < sprites.length; i++){
                                 sprites[i].canvas_resize();
                             }
                     }
+//Special triggers//
+// Penguin slider listener for deleting/adding more penguins
+var penguinSlider = document.getElementById("penguin-amt")
+penguinSlider.addEventListener('change', function() {
+    // case1, push desiredPenguins - currentPenguins to sprites
+    // case2, pop currentPenguins - desiredPenguins from sprites
+    let currentPenguins = sprites.length;
+    if (penguinSlider.value > currentPenguins) {
+        for (let q = 0; q < penguinSlider.value - currentPenguins; q++) {
+            let penguin = new Sprite(canvas.width/2, canvas.height/2, 2, 30, 30, 1, 40);
+            sprites.push(penguin);
+        }
+            
+    }
+    else if (penguinSlider.value < currentPenguins) {
+        for (let q = 0; q < currentPenguins - penguinSlider.value; q++) {
+            sprites.pop();
+        }
+    }
+    
+});
+// Max force slider
+var maxForceSlider = document.getElementById("max-force")
+maxForceSlider.addEventListener('change', function() {
+    maxForce = maxForceSlider.value; 
+});
+// Max speed slider
+var maxSpeedSlider = document.getElementById("max-speed")
+maxSpeedSlider.addEventListener('change', function() {
+    console.log("YO")
+    maxVelocity = maxSpeedSlider.value; 
+});
+// Reset button
+var resetButton = document.getElementById("reset-button")
+resetButton.addEventListener('click', function() {
+    let currentPenguins = sprites.length;
+    for (let q = 0; q < currentPenguins; q++) {
+        sprites.pop();
+    }
+    for (let q = 0; q < penguinSlider.value; q++) {
+        let penguin = new Sprite(canvas.width/2, canvas.height/2, 2, 30, 30, 1, 40);
+        sprites.push(penguin);
+    }
+});
 
 // Main
-checkJsonLoaded();
-let howManyPenguins = 100;
-for (let j = 0; j < howManyPenguins; j++) {
-    let penguin = new Sprite(canvas.width/2, canvas.height/2, 2, 30, 30, 1, 40);
-    sprites.push(penguin);
-}
-resizeCanvas();
-call_me_on_draw();
+loadAnimations().then(() => { // check if json data is loaded into anim arr
+    //let howManyPenguins = 100;
+    resizeCanvas();
+    let howManyPenguins = document.getElementById('penguin-amt').value;
+    for (let j = 0; j < howManyPenguins; j++) {
+        let penguin = new Sprite(canvas.width/2, canvas.height/2, 0, 30, 30, 1, 40);
+        sprites.push(penguin);
+    }
+    call_me_on_draw();
+});
+
 
 // notes for keeping Sprites track of shared resources, spirite[] array, score, boundaries. Threads need to check & update the shared resource!
 // World view - the world can be affected by Sprites on it, projecting shadow/shading. Paraellel, not sequestrial.
@@ -377,7 +434,10 @@ function call_me_on_draw(){
     context.clearRect(0, 0, canvas.width, canvas.height);   
     
     for (let i = 0; i < sprites.length; i++) {
-        sprites[i].edges();
+        if (document.getElementById("bounce").checked)
+            sprites[i].edges_bounce();
+        else
+            sprites[i].edges();
         sprites[i].draw();
         sprites[i].flock(sprites);
         sprites[i].move();
